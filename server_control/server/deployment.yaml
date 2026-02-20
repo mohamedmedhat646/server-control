@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server-control
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: server-control
+  template:
+    metadata:
+      labels:
+        app: server-control
+    spec:
+      containers:
+      - name: server-control
+        image: mohamedmedhat646/server-control:1
+        ports:
+        - containerPort: 3000
