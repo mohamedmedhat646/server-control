@@ -41,10 +41,10 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                export KUBECONFIG=/etc/kubernetes/admin.conf
-                kubectl set image deployment/server-control \
-                server-control=$DOCKER_IMAGE:$BUILD_NUMBER || \
-                kubectl apply -f server_control/server/deployment.yaml
+                export KUBECONFIG=/var/jenkins_home/.kube/config
+                kubectl get nodes
+                kubectl set image deployment/server-control server-control=mohamedmedhat646/server-control:${BUILD_NUMBER}
+                kubectl apply -f server_control/server/deployment.yaml               
                 '''
             }
         }
