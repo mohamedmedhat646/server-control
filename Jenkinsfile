@@ -32,7 +32,7 @@ pipeline {
                 )]) {
                     sh '''
                     echo $PASS | docker login -u $USER --password-stdin
-                    docker push mohamedmedhat646/server-control:${BUILD_NUMBER}
+                    docker push $DOCKER_IMAGE:$BUILD_NUMBER
                     '''
                 }
             }
@@ -42,9 +42,11 @@ pipeline {
             steps {
                 sh '''
                 export KUBECONFIG=/var/jenkins_home/.kube/config
-                kubectl get nodes
-                kubectl set image deployment/server-control server-control=mohamedmedhat646/server-control:${BUILD_NUMBER}
-                kubectl apply -f server_control/server/deployment.yaml               
+
+                kubectl set image deployment/server-control \
+                server-control=$DOCKER_IMAGE:$BUILD_NUMBER
+
+                kubectl rollout status deployment/server-control
                 '''
             }
         }
