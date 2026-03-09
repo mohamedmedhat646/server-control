@@ -32,7 +32,7 @@ pipeline {
                 )]) {
                     sh '''
                     echo $PASS | docker login -u $USER --password-stdin
-                    docker push mohamedmedhat646/server-control:3
+                    docker push mohamedmedhat646/server-control:${BUILD_NUMBER}
                     '''
                 }
             }
