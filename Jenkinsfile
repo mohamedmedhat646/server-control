@@ -79,7 +79,6 @@ pipeline {
                     sh '''
                     export KUBECONFIG="$KCFG"
 
-                    kubectl apply -f k8s/namespace.yaml
                     kubectl -n $K8S_NAMESPACE apply -f k8s/app-configmap.yaml
                     kubectl -n $K8S_NAMESPACE apply -f k8s/app-secret.yaml
                     kubectl -n $K8S_NAMESPACE apply -f k8s/mongo-pvc.yaml
