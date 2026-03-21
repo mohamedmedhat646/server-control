@@ -2,11 +2,13 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "mohamedmedhat646/server-control"
+        DOCKER_IMAGE = "mohamedmedhat646/server-control-backend"
+        K8S_NAMESPACE = "server-control"
+        DEPLOYMENT_NAME = "server-control-backend"
+        CONTAINER_NAME = "backend"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -40,14 +42,15 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-                export KUBECONFIG=/var/jenkins_home/.kube/config
-
-                kubectl set image deployment/server-control \
-                server-control=$DOCKER_IMAGE:$BUILD_NUMBER
-
-                kubectl rollout status deployment/server-control
-                '''
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    kubectl config current-context
+                    kubectl get ns
+                    kubectl -n $K8S_NAMESPACE set image deployment/$DEPLOYMENT_NAME \
+                      $CONTAINER_NAME=$DOCKER_IMAGE:$BUILD_NUMBER
+                    kubectl -n $K8S_NAMESPACE rollout status deployment/$DEPLOYMENT_NAME
+                    '''
+                }
             }
         }
     }
