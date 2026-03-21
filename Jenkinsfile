@@ -17,8 +17,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                url: 'https://github.com/mohamedmedhat646/server-control.git'
+                checkout scm
             }
         }
 
@@ -27,6 +26,7 @@ pipeline {
                 sh '''
                 cd server_control/server
                 docker build -t $BACKEND_IMAGE:$BUILD_NUMBER .
+                docker tag $BACKEND_IMAGE:$BUILD_NUMBER $BACKEND_IMAGE:latest
                 '''
             }
         }
@@ -36,6 +36,7 @@ pipeline {
                 sh '''
                 cd server_control/client
                 docker build -t $FRONTEND_IMAGE:$BUILD_NUMBER .
+                docker tag $FRONTEND_IMAGE:$BUILD_NUMBER $FRONTEND_IMAGE:latest
                 '''
             }
         }
@@ -44,11 +45,11 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                    echo $PASS | docker login -u $USER --password-stdin
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
@@ -58,6 +59,7 @@ pipeline {
             steps {
                 sh '''
                 docker push $BACKEND_IMAGE:$BUILD_NUMBER
+                docker push $BACKEND_IMAGE:latest
                 '''
             }
         }
@@ -66,30 +68,68 @@ pipeline {
             steps {
                 sh '''
                 docker push $FRONTEND_IMAGE:$BUILD_NUMBER
+                docker push $FRONTEND_IMAGE:latest
                 '''
             }
         }
 
-        stage('Deploy Backend to Kubernetes') {
+        stage('Apply Kubernetes Manifests') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
                     sh '''
-                    kubectl config current-context
-                    kubectl -n $K8S_NAMESPACE set image deployment/$BACKEND_DEPLOYMENT \
-                      $BACKEND_CONTAINER=$BACKEND_IMAGE:$BUILD_NUMBER
-                    kubectl -n $K8S_NAMESPACE rollout status deployment/$BACKEND_DEPLOYMENT
+                    export KUBECONFIG="$KCFG"
+
+                    kubectl apply -f k8s/namespace.yaml
+                    kubectl -n $K8S_NAMESPACE apply -f k8s/app-configmap.yaml
+                    kubectl -n $K8S_NAMESPACE apply -f k8s/app-secret.yaml
+                    kubectl -n $K8S_NAMESPACE apply -f k8s/mongo-pvc.yaml
+                    kubectl -n $K8S_NAMESPACE apply -f k8s/mongo.yaml
+                    kubectl -n $K8S_NAMESPACE apply -f k8s/backend.yaml
+                    kubectl -n $K8S_NAMESPACE apply -f k8s/frontend.yaml
                     '''
                 }
             }
         }
 
-        stage('Deploy Frontend to Kubernetes') {
+        stage('Deploy Backend Image') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
                     sh '''
+                    export KUBECONFIG="$KCFG"
+
+                    kubectl -n $K8S_NAMESPACE set image deployment/$BACKEND_DEPLOYMENT \
+                      $BACKEND_CONTAINER=$BACKEND_IMAGE:$BUILD_NUMBER
+
+                    kubectl -n $K8S_NAMESPACE rollout status deployment/$BACKEND_DEPLOYMENT --timeout=180s
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Frontend Image') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
+                    sh '''
+                    export KUBECONFIG="$KCFG"
+
                     kubectl -n $K8S_NAMESPACE set image deployment/$FRONTEND_DEPLOYMENT \
                       $FRONTEND_CONTAINER=$FRONTEND_IMAGE:$BUILD_NUMBER
-                    kubectl -n $K8S_NAMESPACE rollout status deployment/$FRONTEND_DEPLOYMENT
+
+                    kubectl -n $K8S_NAMESPACE rollout status deployment/$FRONTEND_DEPLOYMENT --timeout=180s
+                    '''
+                }
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KCFG')]) {
+                    sh '''
+                    export KUBECONFIG="$KCFG"
+
+                    kubectl -n $K8S_NAMESPACE get deploy
+                    kubectl -n $K8S_NAMESPACE get pods -o wide
+                    kubectl -n $K8S_NAMESPACE get svc
                     '''
                 }
             }

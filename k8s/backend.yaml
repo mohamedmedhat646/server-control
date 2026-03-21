@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server-control-backend
+  namespace: server-control
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: server-control-backend
+  template:
+    metadata:
+      labels:
+        app: server-control-backend
+    spec:
+      containers:
+        - name: backend
+          image: mohamedmedhat646/server-control-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: server-control-config
+            - secretRef:
+                name: server-control-secret
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server-control-backend
+  namespace: server-control
+spec:
+  selector:
+    app: server-control-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+  type: ClusterIP
