@@ -2,10 +2,16 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "mohamedmedhat646/server-control-backend"
         K8S_NAMESPACE = "server-control"
-        DEPLOYMENT_NAME = "server-control-backend"
-        CONTAINER_NAME = "backend"
+
+        BACKEND_IMAGE = "mohamedmedhat646/server-control-backend"
+        FRONTEND_IMAGE = "mohamedmedhat646/server-control-frontend"
+
+        BACKEND_DEPLOYMENT = "server-control-backend"
+        FRONTEND_DEPLOYMENT = "server-control-frontend"
+
+        BACKEND_CONTAINER = "backend"
+        FRONTEND_CONTAINER = "frontend"
     }
 
     stages {
@@ -16,16 +22,25 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Backend Image') {
             steps {
                 sh '''
                 cd server_control/server
-                docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .
+                docker build -t $BACKEND_IMAGE:$BUILD_NUMBER .
                 '''
             }
         }
 
-        stage('Push Image') {
+        stage('Build Frontend Image') {
+            steps {
+                sh '''
+                cd server_control/client
+                docker build -t $FRONTEND_IMAGE:$BUILD_NUMBER .
+                '''
+            }
+        }
+
+        stage('Docker Login') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
@@ -34,24 +49,56 @@ pipeline {
                 )]) {
                     sh '''
                     echo $PASS | docker login -u $USER --password-stdin
-                    docker push $DOCKER_IMAGE:$BUILD_NUMBER
                     '''
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Push Backend Image') {
+            steps {
+                sh '''
+                docker push $BACKEND_IMAGE:$BUILD_NUMBER
+                '''
+            }
+        }
+
+        stage('Push Frontend Image') {
+            steps {
+                sh '''
+                docker push $FRONTEND_IMAGE:$BUILD_NUMBER
+                '''
+            }
+        }
+
+        stage('Deploy Backend to Kubernetes') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
                     sh '''
                     kubectl config current-context
-                    kubectl get ns
-                    kubectl -n $K8S_NAMESPACE set image deployment/$DEPLOYMENT_NAME \
-                      $CONTAINER_NAME=$DOCKER_IMAGE:$BUILD_NUMBER
-                    kubectl -n $K8S_NAMESPACE rollout status deployment/$DEPLOYMENT_NAME
+                    kubectl -n $K8S_NAMESPACE set image deployment/$BACKEND_DEPLOYMENT \
+                      $BACKEND_CONTAINER=$BACKEND_IMAGE:$BUILD_NUMBER
+                    kubectl -n $K8S_NAMESPACE rollout status deployment/$BACKEND_DEPLOYMENT
                     '''
                 }
             }
+        }
+
+        stage('Deploy Frontend to Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    kubectl -n $K8S_NAMESPACE set image deployment/$FRONTEND_DEPLOYMENT \
+                      $FRONTEND_CONTAINER=$FRONTEND_IMAGE:$BUILD_NUMBER
+                    kubectl -n $K8S_NAMESPACE rollout status deployment/$FRONTEND_DEPLOYMENT
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
         }
     }
 }
